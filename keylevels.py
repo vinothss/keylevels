@@ -138,7 +138,11 @@ def print_recommendations(
 # ---------------------------
 def analyze_ticker(
     ticker: str, start: str, intervals: List[str]
-) -> Tuple[float, Dict[str, List[Tuple[float, Dict[str, int]]]]]:
+) -> Tuple[
+    float,
+    Dict[str, List[Tuple[float, Dict[str, int]]]],
+    Dict[str, Dict[float, Dict[str, int]]],
+]:
     """Compute key levels for *ticker* and return nearest recommendations."""
     all_swings: List[pd.DataFrame] = []
     levels_by_tf: Dict[str, Dict[float, Dict[str, int]]] = {}
@@ -160,18 +164,59 @@ def analyze_ticker(
     df_daily = download_data(ticker, start=start, interval="1d")
     latest_close = df_daily["Close"].iloc[-1]
     nearest = nearest_key_levels(levels_by_tf, latest_close)
-    return latest_close, nearest
+    return latest_close, nearest, levels_by_tf
 
 
 def run_analysis(tickers: List[str], start: str, intervals: List[str]) -> None:
     """Run analysis for a list of tickers and print recommendations."""
     for ticker in tickers:
         try:
-            current_price, nearest = analyze_ticker(ticker, start, intervals)
+            current_price, nearest, _ = analyze_ticker(ticker, start, intervals)
         except ValueError as exc:  # No data found
             print(f"{ticker}: {exc}")
             continue
         print_recommendations(ticker, current_price, nearest)
+
+
+# ---------------------------
+# BACKTESTING
+# ---------------------------
+def backtest_key_levels(
+    df: pd.DataFrame, levels_by_tf: Dict[str, Dict[float, Dict[str, int]]], lookahead: int
+) -> Dict[str, float]:
+    """Simple backtest: count touches of key levels within a lookahead window."""
+    hits = 0
+    tests = 0
+
+    for levels in levels_by_tf.values():
+        for level in levels:
+            for i in range(len(df) - lookahead):
+                window = df.iloc[i + 1 : i + 1 + lookahead]
+                if ((window["Low"] <= level) & (window["High"] >= level)).any():
+                    hits += 1
+                tests += 1
+
+    hit_rate = hits / tests if tests else 0.0
+    return {"hits": hits, "tests": tests, "hit_rate": hit_rate}
+
+
+def run_backtest(
+    tickers: List[str], start: str, intervals: List[str], lookahead: int
+) -> None:
+    """Run backtests for tickers and print summary statistics."""
+    for ticker in tickers:
+        try:
+            _, _, levels_by_tf = analyze_ticker(ticker, start, intervals)
+        except ValueError as exc:
+            print(f"{ticker}: {exc}")
+            continue
+
+        df = download_data(ticker, start=start, interval="1d")
+        stats = backtest_key_levels(df, levels_by_tf, lookahead)
+        print(
+            f"{ticker}: hit rate {stats['hit_rate']:.2%} "
+            f"({stats['hits']}/{stats['tests']})"
+        )
 
 
 # ---------------------------
@@ -192,6 +237,12 @@ def parse_args() -> argparse.Namespace:
         help="Optional HH:MM time to run each day; keeps the script alive",
         default=None,
     )
+    parser.add_argument(
+        "--backtest",
+        type=int,
+        default=None,
+        help="Lookahead periods for key level backtesting",
+    )
     return parser.parse_args()
 
 
@@ -199,7 +250,10 @@ def main() -> None:
     args = parse_args()
 
     def job() -> None:
-        run_analysis(args.tickers, args.start, args.intervals)
+        if args.backtest is not None:
+            run_backtest(args.tickers, args.start, args.intervals, args.backtest)
+        else:
+            run_analysis(args.tickers, args.start, args.intervals)
 
     if args.schedule:
         if schedule is None:

@@ -1,4 +1,4 @@
-pandas
-yfinance
+pandas>=1.5
+yfinance>=0.2
 plotly
 schedule

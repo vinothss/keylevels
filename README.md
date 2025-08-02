@@ -29,3 +29,27 @@ python keylevels.py --tickers AAPL MSFT --schedule 16:00
 ```
 
 The tool can be scheduled by external systems such as cron as well.
+
+## Backtesting
+
+To evaluate how price has historically reacted to the detected levels, use the
+`--backtest` flag. The numeric argument sets the *lookahead* window in bars for
+checking whether price bounces or breaks a level.
+
+```bash
+python keylevels.py --tickers AAPL --backtest 10
+```
+
+The backtest currently reports:
+
+* **Bounce ratio** – percentage of touches that result in a bounce within the
+  lookahead window.
+* **Average move** – mean price change following bounces or breaks.
+
+The logic assumes the same historical data used for level detection and
+evaluates behaviour over the next `N` bars where `N` is the `--backtest`
+value.
+
+No extra dependencies are required beyond those in `requirements.txt`, but make
+sure recent versions of `pandas` and `yfinance` are installed (e.g.
+`pandas>=1.5` and `yfinance>=0.2`) so the backtest calculations work properly.

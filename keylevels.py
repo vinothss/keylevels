@@ -94,6 +94,81 @@ def get_key_levels(swings_df: pd.DataFrame, min_count: int = 2) -> Dict[float, D
     }
 
 
+def backtest_key_levels(
+    df: pd.DataFrame,
+    levels: Dict[float, Dict[str, int]],
+    lookahead: int = 5,
+) -> Dict[float, Dict[str, float]]:
+    """Backtest *levels* against historical price data.
+
+    For each level, every candle that touches it is examined to determine
+    whether price subsequently "bounces" away or "breaks" through within the
+    next *lookahead* candles. Statistics for touches, bounce ratio and
+    average moves after bounces/breaks are returned for later reporting.
+
+    Parameters
+    ----------
+    df:
+        Price data with columns ``High`` and ``Low`` (and ``Close`` for
+        direction detection).
+    levels:
+        Levels as produced by :func:`get_key_levels`.
+    lookahead:
+        Number of candles to inspect after each touch.
+
+    Returns
+    -------
+    Dict[float, Dict[str, float]]
+        Mapping of level price to backtest statistics.
+    """
+
+    stats: Dict[float, Dict[str, float]] = {}
+    for level, info in levels.items():
+        touches = bounces = breaks = 0
+        move_bounce: List[float] = []
+        move_break: List[float] = []
+
+        for i in range(1, len(df) - lookahead):
+            high = df["High"].iloc[i]
+            low = df["Low"].iloc[i]
+
+            if low <= level <= high:
+                touches += 1
+                prev_close = df["Close"].iloc[i - 1]
+                future = df.iloc[i + 1 : i + 1 + lookahead]
+
+                if prev_close > level:  # approached from above -> support test
+                    if future["Low"].min() < level:
+                        breaks += 1
+                        move_break.append(level - future["Low"].min())
+                    else:
+                        bounces += 1
+                        move_bounce.append(future["High"].max() - level)
+                else:  # approached from below -> resistance test
+                    if future["High"].max() > level:
+                        breaks += 1
+                        move_break.append(future["High"].max() - level)
+                    else:
+                        bounces += 1
+                        move_bounce.append(level - future["Low"].min())
+
+        if touches:
+            stats[level] = {
+                "touches": float(touches),
+                "bounces": float(bounces),
+                "breaks": float(breaks),
+                "bounce_ratio": bounces / touches if touches else 0.0,
+                "avg_move_bounce": (
+                    sum(move_bounce) / len(move_bounce) if move_bounce else 0.0
+                ),
+                "avg_move_break": (
+                    sum(move_break) / len(move_break) if move_break else 0.0
+                ),
+            }
+
+    return stats
+
+
 # ---------------------------
 # NEAREST KEY LEVELS
 # ---------------------------

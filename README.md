@@ -33,6 +33,7 @@ The tool can be scheduled by external systems such as cron as well.
 
 ## Backtesting
 
+
 To evaluate how price has historically reacted to the detected levels, use the
 `--backtest` flag along with separate training and testing windows. `--train-start`
 defines the beginning of the training period used for level detection, while
@@ -49,9 +50,9 @@ will raise an error.
 
 The backtest currently reports:
 
-* **Bounce ratio** – percentage of touches that result in a bounce within the
-  lookahead window.
-* **Average move** – mean price change following bounces or breaks.
+```text
+AAPL: hit rate 21.74% (10/46)
+```
 
 During backtesting, levels are detected using data from the training window
 and then evaluated on the separate testing window. Each touch is examined over

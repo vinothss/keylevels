@@ -34,10 +34,11 @@ The tool can be scheduled by external systems such as cron as well.
 
 To evaluate how price has historically reacted to the detected levels, use the
 `--backtest` flag. The numeric argument sets the *lookahead* window in bars for
-checking whether price bounces or breaks a level.
+checking whether price bounces or breaks a level. Specify the training and
+testing periods with `--train-start`, `--train-end` and `--test-end`:
 
 ```bash
-python keylevels.py --tickers AAPL --backtest 10
+python keylevels.py --tickers AAPL --backtest 10 --train-start 2023-01-01 --train-end 2023-12-31 --test-end 2024-06-01
 ```
 
 The backtest currently reports:
@@ -46,9 +47,9 @@ The backtest currently reports:
   lookahead window.
 * **Average move** – mean price change following bounces or breaks.
 
-The logic assumes the same historical data used for level detection and
-evaluates behaviour over the next `N` bars where `N` is the `--backtest`
-value.
+Levels are detected using the training period and behaviour is evaluated on
+data after `--train-end` up to `--test-end`, inspecting the next `N` bars where
+`N` is the `--backtest` value.
 
 No extra dependencies are required beyond those in `requirements.txt`, but make
 sure recent versions of `pandas` and `yfinance` are installed (e.g.

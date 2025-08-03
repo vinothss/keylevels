@@ -16,9 +16,14 @@ except Exception:  # pragma: no cover
 # ---------------------------
 # DATA DOWNLOAD
 # ---------------------------
-def download_data(ticker: str, start: str = "2024-01-01", interval: str = "1d") -> pd.DataFrame:
+def download_data(
+    ticker: str,
+    start: str = "2024-01-01",
+    end: str | None = None,
+    interval: str = "1d",
+) -> pd.DataFrame:
     """Download OHLCV data for *ticker* using yfinance."""
-    df = yf.download(ticker, start=start, interval=interval, group_by="ticker")
+    df = yf.download(ticker, start=start, end=end, interval=interval, group_by="ticker")
     df.dropna(inplace=True)
     df.index = pd.to_datetime(df.index)
     if isinstance(df.columns, pd.MultiIndex):
@@ -212,7 +217,10 @@ def print_recommendations(
 # MAIN ANALYSIS ROUTINES
 # ---------------------------
 def analyze_ticker(
-    ticker: str, start: str, intervals: List[str]
+    ticker: str,
+    start: str,
+    end: str | None,
+    intervals: List[str],
 ) -> Tuple[
     float,
     Dict[str, List[Tuple[float, Dict[str, int]]]],
@@ -223,7 +231,7 @@ def analyze_ticker(
     levels_by_tf: Dict[str, Dict[float, Dict[str, int]]] = {}
 
     for interval in intervals:
-        df = download_data(ticker, start=start, interval=interval)
+        df = download_data(ticker, start=start, end=end, interval=interval)
         if df.empty:
             continue
         swings = find_swing_points(df)
@@ -236,7 +244,7 @@ def analyze_ticker(
     if not all_swings:
         raise ValueError(f"No swing data found for {ticker}.")
 
-    df_daily = download_data(ticker, start=start, interval="1d")
+    df_daily = download_data(ticker, start=start, end=end, interval="1d")
     latest_close = df_daily["Close"].iloc[-1]
     nearest = nearest_key_levels(levels_by_tf, latest_close)
     return latest_close, nearest, levels_by_tf
@@ -246,7 +254,7 @@ def run_analysis(tickers: List[str], start: str, intervals: List[str]) -> None:
     """Run analysis for a list of tickers and print recommendations."""
     for ticker in tickers:
         try:
-            current_price, nearest, _ = analyze_ticker(ticker, start, intervals)
+            current_price, nearest, _ = analyze_ticker(ticker, start, None, intervals)
         except ValueError as exc:  # No data found
             print(f"{ticker}: {exc}")
             continue
@@ -276,17 +284,22 @@ def backtest_key_levels(
 
 
 def run_backtest(
-    tickers: List[str], start: str, intervals: List[str], lookahead: int
+    tickers: List[str],
+    train_start: str,
+    train_end: str,
+    test_end: str,
+    intervals: List[str],
+    lookahead: int,
 ) -> None:
     """Run backtests for tickers and print summary statistics."""
     for ticker in tickers:
         try:
-            _, _, levels_by_tf = analyze_ticker(ticker, start, intervals)
+            _, _, levels_by_tf = analyze_ticker(ticker, train_start, train_end, intervals)
         except ValueError as exc:
             print(f"{ticker}: {exc}")
             continue
 
-        df = download_data(ticker, start=start, interval="1d")
+        df = download_data(ticker, start=train_end, end=test_end, interval="1d")
         stats = backtest_key_levels(df, levels_by_tf, lookahead)
         print(
             f"{ticker}: hit rate {stats['hit_rate']:.2%} "
@@ -301,23 +314,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Multi-timeframe key level analyzer")
     parser.add_argument("--tickers", nargs="+", help="Tickers to monitor", required=True)
     parser.add_argument("--start", default="2024-01-01", help="Start date for historical data")
-    parser.add_argument(
-        "--intervals",
-        nargs="*",
-        default=["1d", "1h", "4h", "1wk"],
-        help="Timeframes to analyze (e.g. 1d 1h)"
-    )
-    parser.add_argument(
-        "--schedule",
-        help="Optional HH:MM time to run each day; keeps the script alive",
-        default=None,
-    )
-    parser.add_argument(
-        "--backtest",
-        type=int,
-        default=None,
-        help="Lookahead periods for key level backtesting",
-    )
+    parser.add_argument("--train-start", default=None, help="Training period start date (defaults to --start)")
+    parser.add_argument("--train-end", default=None, help="Training period end date")
+    parser.add_argument("--test-end", default=None, help="Test period end date")
+    parser.add_argument("--intervals", nargs="*", default=["1d", "1h", "4h", "1wk"], help="Timeframes to analyze (e.g. 1d 1h)")
+    parser.add_argument("--schedule", help="Optional HH:MM time to run each day; keeps the script alive", default=None)
+    parser.add_argument("--backtest", type=int, default=None, help="Lookahead periods for key level backtesting")
     return parser.parse_args()
 
 
@@ -326,7 +328,17 @@ def main() -> None:
 
     def job() -> None:
         if args.backtest is not None:
-            run_backtest(args.tickers, args.start, args.intervals, args.backtest)
+            if args.train_end is None or args.test_end is None:
+                raise ValueError("--train-end and --test-end are required for backtesting")
+            train_start = args.train_start or args.start
+            run_backtest(
+                args.tickers,
+                train_start,
+                args.train_end,
+                args.test_end,
+                args.intervals,
+                args.backtest,
+            )
         else:
             run_analysis(args.tickers, args.start, args.intervals)
 

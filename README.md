@@ -32,23 +32,25 @@ The tool can be scheduled by external systems such as cron as well.
 
 ## Backtesting
 
-To evaluate how price has historically reacted to the detected levels, use the
-`--backtest` flag. The numeric argument sets the *lookahead* window in bars for
-checking whether price bounces or breaks a level.
+To estimate how often price revisits detected levels, use the `--backtest`
+flag. The numeric argument sets the *lookahead* window in bars for counting
+future touches of each level.
 
 ```bash
 python keylevels.py --tickers AAPL --backtest 10
 ```
 
-The backtest currently reports:
+The backtest summarises how many potential tests occurred and how many were
+actual hits, reporting a hit rate:
 
-* **Bounce ratio** – percentage of touches that result in a bounce within the
-  lookahead window.
-* **Average move** – mean price change following bounces or breaks.
+```text
+AAPL: hit rate 21.74% (10/46)
+```
 
-The logic assumes the same historical data used for level detection and
-evaluates behaviour over the next `N` bars where `N` is the `--backtest`
-value.
+The same historical period is used to derive the levels and to evaluate them,
+so the split is effectively in-sample. Levels remain static during testing and
+no out-of-sample validation is performed, which can lead to optimistic hit
+rates.
 
 No extra dependencies are required beyond those in `requirements.txt`, but make
 sure recent versions of `pandas` and `yfinance` are installed (e.g.
